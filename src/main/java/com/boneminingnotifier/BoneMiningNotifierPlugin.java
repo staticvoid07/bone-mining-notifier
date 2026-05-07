@@ -1,16 +1,12 @@
 package com.boneminingnotifier;
 
 import com.google.inject.Provides;
-import java.util.HashSet;
-import java.util.Set;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
-import net.runelite.api.GameState;
 import net.runelite.api.ObjectComposition;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.GameObjectDespawned;
-import net.runelite.api.events.GameStateChanged;
 import net.runelite.client.Notifier;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
@@ -36,10 +32,6 @@ public class BoneMiningNotifierPlugin extends Plugin
 	@Inject
 	private BoneMiningNotifierConfig config;
 
-	// Rocks we have already seen deplete this scene; used to distinguish
-	// depletion (active→depleted) from respawn (depleted→active).
-	private final Set<WorldPoint> depletedRocks = new HashSet<>();
-
 	@Override
 	protected void startUp()
 	{
@@ -49,30 +41,17 @@ public class BoneMiningNotifierPlugin extends Plugin
 	@Override
 	protected void shutDown()
 	{
-		depletedRocks.clear();
 		log.debug("Bone Mining Notifier stopped!");
 	}
 
 	@Subscribe
 	public void onGameObjectDespawned(GameObjectDespawned event)
 	{
-		ObjectComposition composition = client.getObjectDefinition(event.getGameObject().getId());
-		if (!CALCIFIED_ROCK_NAME.equals(composition.getName()))
+		ObjectComposition comp = client.getObjectDefinition(event.getGameObject().getId());
+		if (!CALCIFIED_ROCK_NAME.equals(comp.getName()))
 		{
 			return;
 		}
-
-		WorldPoint rockTile = event.getGameObject().getWorldLocation();
-
-		if (depletedRocks.contains(rockTile))
-		{
-			// Depleted version cycling out (respawn): clear tracked state, no notification
-			depletedRocks.remove(rockTile);
-			return;
-		}
-
-		// Active version just depleted
-		depletedRocks.add(rockTile);
 
 		if (client.getLocalPlayer() == null)
 		{
@@ -80,18 +59,11 @@ public class BoneMiningNotifierPlugin extends Plugin
 		}
 
 		WorldPoint playerTile = client.getLocalPlayer().getWorldLocation();
+		WorldPoint rockTile = event.getGameObject().getWorldLocation();
+
 		if (isCardinallyAdjacent(playerTile, rockTile))
 		{
 			notifier.notify(config.notification(), "Calcified rock depleted next to you!");
-		}
-	}
-
-	@Subscribe
-	public void onGameStateChanged(GameStateChanged event)
-	{
-		if (event.getGameState() == GameState.LOADING)
-		{
-			depletedRocks.clear();
 		}
 	}
 
