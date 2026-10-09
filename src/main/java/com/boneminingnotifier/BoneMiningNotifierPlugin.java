@@ -4,9 +4,16 @@ import com.google.inject.Provides;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
+import net.runelite.api.GameState;
 import net.runelite.api.ObjectComposition;
+import net.runelite.api.Player;
+import net.runelite.api.coords.Angle;
+import net.runelite.api.coords.Direction;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.GameObjectDespawned;
+import net.runelite.api.events.GameObjectSpawned;
+import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.GameTick;
 import net.runelite.client.Notifier;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
@@ -16,8 +23,8 @@ import net.runelite.client.plugins.PluginDescriptor;
 @Slf4j
 @PluginDescriptor(
 	name = "Bone Mining Notifier",
-	description = "Notifies when a calcified rock depletes in a cardinal direction adjacent to you",
-	tags = {"bone", "mining", "calcified", "varlamore", "notifier"}
+	description = "Notifies when a calcified rock next to you depletes, and when the one you are facing respawns",
+	tags = {"bone", "mining", "calcified", "varlamore", "notifier", "respawn"}
 )
 public class BoneMiningNotifierPlugin extends Plugin
 {
@@ -31,6 +38,10 @@ public class BoneMiningNotifierPlugin extends Plugin
 
 	@Inject
 	private BoneMiningNotifierConfig config;
+
+	// Set while the scene is loading, so objects spawned by the load itself
+	// aren't mistaken for rocks respawning.
+	private boolean sceneLoading;
 
 	@Override
 	protected void startUp()
@@ -65,6 +76,65 @@ public class BoneMiningNotifierPlugin extends Plugin
 		{
 			notifier.notify(config.notification(), "Calcified rock depleted next to you!");
 		}
+	}
+
+	@Subscribe
+	public void onGameObjectSpawned(GameObjectSpawned event)
+	{
+		if (sceneLoading)
+		{
+			return;
+		}
+
+		ObjectComposition comp = client.getObjectDefinition(event.getGameObject().getId());
+		if (!CALCIFIED_ROCK_NAME.equals(comp.getName()))
+		{
+			return;
+		}
+
+		Player player = client.getLocalPlayer();
+		if (player == null)
+		{
+			return;
+		}
+
+		WorldPoint playerTile = player.getWorldLocation();
+		WorldPoint rockTile = event.getGameObject().getWorldLocation();
+
+		if (isCardinallyAdjacent(playerTile, rockTile)
+			&& directionTo(playerTile, rockTile) == new Angle(player.getOrientation()).getNearestDirection())
+		{
+			notifier.notify(config.respawnNotification(), "Calcified rock respawned in front of you!");
+		}
+	}
+
+	@Subscribe
+	public void onGameStateChanged(GameStateChanged event)
+	{
+		if (event.getGameState() == GameState.LOADING)
+		{
+			sceneLoading = true;
+		}
+	}
+
+	@Subscribe
+	public void onGameTick(GameTick event)
+	{
+		sceneLoading = false;
+	}
+
+	// Assumes a and b are cardinally adjacent
+	private static Direction directionTo(WorldPoint a, WorldPoint b)
+	{
+		if (b.getX() > a.getX())
+		{
+			return Direction.EAST;
+		}
+		if (b.getX() < a.getX())
+		{
+			return Direction.WEST;
+		}
+		return b.getY() > a.getY() ? Direction.NORTH : Direction.SOUTH;
 	}
 
 	private static boolean isCardinallyAdjacent(WorldPoint a, WorldPoint b)

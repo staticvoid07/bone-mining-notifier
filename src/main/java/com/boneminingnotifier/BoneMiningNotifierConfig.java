@@ -11,9 +11,21 @@ public interface BoneMiningNotifierConfig extends Config
 	@ConfigItem(
 		keyName = "notification",
 		name = "Bone mining notification",
-		description = "Notify when a calcified rock depletes next to you"
+		description = "Notify when a calcified rock depletes next to you",
+		position = 0
 	)
 	default Notification notification()
+	{
+		return Notification.ON;
+	}
+
+	@ConfigItem(
+		keyName = "respawnNotification",
+		name = "Rock respawn notification",
+		description = "Notify when the calcified rock you are facing becomes minable again",
+		position = 1
+	)
+	default Notification respawnNotification()
 	{
 		return Notification.ON;
 	}
